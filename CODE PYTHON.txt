@@ -1,0 +1,96 @@
+import serial
+import time
+import json
+from azure.iot.device import IoTHubDeviceClient, Message
+import threading
+
+# Configuración de Azure IoT Hub
+CONNECTION_STRING = "HostName=Analisis.azure-devices.net;DeviceId=dispositivo;SharedAccessKey=mxrw1F4G+FT1Uihhx2EM46ZyNGayg4GCy9uadk8yJsI="
+client = IoTHubDeviceClient.create_from_connection_string(CONNECTION_STRING)
+
+# Variable global para mensajes recibidos
+mensaje_recibido = None
+
+# Función para enviar mensajes a Azure IoT Hub
+def enviar_a_azure(mensaje):
+    try:
+        json_data = json.dumps({"message": mensaje})
+        message = Message(json_data)
+        client.send_message(message)
+        print("Mensaje enviado a Azure IoT Hub:", mensaje)
+    except Exception as e:
+        print(f"Error al enviar mensaje a Azure IoT Hub: {e}")
+
+# Función para manejar mensajes recibidos
+def mensaje_recibido_handler(message):
+    global mensaje_recibido
+    mensaje_recibido = message.data.decode('utf-8')
+    print("Mensaje recibido desde Azure IoT Hub:", mensaje_recibido)
+
+# Configurar el manejador de mensajes
+client.on_message_received = mensaje_recibido_handler
+
+# Conexión con Arduino
+arduino = None
+
+# Función para iniciar conexión con Arduino
+def iniciar_conexion_arduino():
+    global arduino
+    try:
+        arduino = serial.Serial('COM2', 9600)  # Asegúrate de usar el puerto correcto
+        time.sleep(2)  # Espera para estabilizar la conexión
+        print("Conexión establecida con el Arduino.")
+    except serial.SerialException as e:
+        print(f"Error al abrir el puerto serial: {e}")
+
+# Función para cerrar conexión con Arduino
+def cerrar_conexion_arduino():
+    global arduino
+    if arduino is not None:
+        arduino.close()
+        print("Conexión con Arduino cerrada.")
+
+# Función para cerrar la conexión con Azure IoT Hub
+def cerrar_conexion_azure():
+    try:
+        client.shutdown()
+        print("Conexión con Azure IoT Hub cerrada.")
+    except Exception as e:
+        print(f"Error al cerrar la conexión con Azure IoT Hub: {e}")
+
+print("Presione 'q' para empezar a leer los datos.")
+
+while True:
+    datousuario = input()
+
+    if datousuario.lower() == 'q':
+        print("Iniciando lectura de datos...")
+        iniciar_conexion_arduino()
+        break
+
+    print("Presione 'q' para empezar a leer los datos.")
+
+# Hilo para recibir mensajes de Azure IoT Hub
+def hilo_mensajes_azure():
+    while True:
+        time.sleep(1)  # El hilo sigue ejecutándose, y el manejador de eventos maneja los mensajes
+
+thread_azure = threading.Thread(target=hilo_mensajes_azure)
+thread_azure.daemon = True
+thread_azure.start()
+
+try:
+    while True:
+        # Leer datos de Arduino y enviar a Azure IoT Hub
+        if arduino is not None and arduino.in_waiting > 0:
+            try:
+                mensaje_desde_arduino = arduino.readline().decode().strip()
+                print("Datos recibidos:", mensaje_desde_arduino)
+                enviar_a_azure(mensaje_desde_arduino)  # Enviar los datos a Azure IoT Hub
+            except Exception as e:
+                print(f"Error al leer datos del puerto serial: {e}")
+
+finally:
+    # Cerrar la conexión con Arduino y Azure IoT Hub al finalizar
+    cerrar_conexion_arduino()
+    cerrar_conexion_azure()

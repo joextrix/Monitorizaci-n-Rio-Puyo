@@ -1,0 +1,93 @@
+CODIGO PLACA ARDUINO 
+
+int phSensorPin = A0;
+int turbiditySensorPin = A1;
+float calibration_value = 21.34;
+float turbidityValue = 0;
+unsigned long int avgval; 
+int buffer_arr[10], temp;
+bool isWaterClean = true; // Variable para indicar si el agua está limpia o no
+
+void setup() {
+  Serial.begin(9600);
+}
+
+void loop() {
+  // Leer pH
+  int phValue = analogRead(phSensorPin);
+  float ph = convertToPh(phValue);
+
+  // Leer turbidez
+  int turbidityValue = analogRead(turbiditySensorPin);
+  float turbidity = convertToTurbidity(turbidityValue);
+
+  // Imprimir lecturas por el puerto serie
+  Serial.print("pH: ");
+  Serial.print(ph);
+  Serial.print(", Turbidity: ");
+  Serial.print(turbidity);
+  Serial.println(" NTU");
+
+  // Tomar decisiones basadas en las lecturas de los sensores
+  if (ph < 6.5 || turbidity > 50) {
+    isWaterClean = false;
+  } else {
+    isWaterClean = true;
+  }
+
+  // Mostrar estado del agua
+  mostrarEstadoAgua();
+
+  delay(1000);
+}
+
+float convertToPh(int value) {
+  for (int i = 0; i < 10; i++) { 
+    buffer_arr[i] = analogRead(phSensorPin);
+    delay(30);
+  }
+  
+  // Ordenar el buffer
+  for (int i = 0; i < 9; i++) {
+    for (int j = i + 1; j < 10; j++) {
+      if (buffer_arr[i] > buffer_arr[j]) {
+        temp = buffer_arr[i];
+        buffer_arr[i] = buffer_arr[j];
+        buffer_arr[j] = temp;
+      }
+    }
+  }
+  
+  // Calcular valor promedio del buffer
+  avgval = 0;
+  for (int i = 2; i < 8; i++) {
+    avgval += buffer_arr[i];
+  }
+  
+  // Calcular pH
+  float volt = (float)avgval * 5.0 / 1024 / 6;
+  float ph_act = -5.70 * volt + calibration_value;
+  
+  return ph_act;
+}
+
+float convertToTurbidity(int value) {
+  // Convertir el valor analógico a voltaje
+  float turbidityVoltage = (5.0 / 1023.0) * value;   
+  
+  // Calcular turbidez utilizando la curva de calibración
+  float turbidity = (133.42 * turbidityVoltage * turbidityVoltage * turbidityVoltage) - 
+                    (255.86 * turbidityVoltage * turbidityVoltage) + 
+                    (857.39 * turbidityVoltage) - 827.67;   
+  
+  return turbidity;
+}
+
+void mostrarEstadoAgua() {
+  Serial.print("Water condition: ");
+  if (isWaterClean) {
+    Serial.println("Clean");
+  } else {
+    Serial.println("Turbid");
+  }
+}
